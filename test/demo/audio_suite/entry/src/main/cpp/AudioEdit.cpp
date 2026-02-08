@@ -965,7 +965,6 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
         if (napiStatus != napi_ok) {
             OH_LOG_Print(LOG_APP, LOG_WARN, GLOBAL_RESMGR, TAG,
                 "audioEditTest InitAudioRenderer: Failed to parse bitDepthMode, using default (int mode)");
-            bitDepthMode = BITDEPTH_MODE_INT;  // Use default value on parse failure
         }
     }
 
