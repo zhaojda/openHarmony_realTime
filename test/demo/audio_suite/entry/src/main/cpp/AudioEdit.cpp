@@ -963,6 +963,8 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
     if (argc >= 4) {
         napiStatus = napi_get_value_int32(env, argv[3], &bitDepthMode);
         if (napiStatus != napi_ok) {
+            OH_LOG_Print(LOG_APP, LOG_WARN, GLOBAL_RESMGR, TAG,
+                "audioEditTest InitAudioRenderer: Failed to parse bitDepthMode, defaulting to int mode (0)");
             bitDepthMode = BIT_DEPTH_MODE_INT; // Default to int mode
         }
     }
