@@ -794,7 +794,18 @@ static napi_value AudioRendererStart(napi_env env, napi_callback_info info)
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, TAG, "g_writeDataBufferMap size %{public}d",
         g_writeDataBufferMap.size());
     ProcessPipeline();
-    g_playTotalAudioData = (char *)malloc(MAX_PLAY_RESULT_BUFFER_SIZE);
+    
+    // Reset global state to prevent cross-test contamination
+    g_playFinishedFlag = false;
+    g_playResultTotalSize = 0;
+    
+    // Free old buffer before allocating new one to prevent memory leak
+    if (g_playTotalAudioData != nullptr) {
+        free(g_playTotalAudioData);
+        g_playTotalAudioData = nullptr;
+    }
+    g_playTotalAudioData = (char *)calloc(1, MAX_PLAY_RESULT_BUFFER_SIZE);
+    
     // start
     OH_AudioRenderer_Start(audioRenderer);
     return nullptr;
