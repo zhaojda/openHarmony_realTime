@@ -31,6 +31,10 @@ const SUCCESS: number = 0;
 const FAILED: number = 1;
 const csvReportHeaderText = `执行管线,开始执行时间,结束执行时间,总耗时,输入文件,输入音频时长,输出文件,执行结果\n`;
 
+// Bit depth mode constants for distinguishing int and float formats
+const BIT_DEPTH_MODE_INT: number = 0;   // Integer format (e.g., S32LE)
+const BIT_DEPTH_MODE_FLOAT: number = 1; // Float format (e.g., F32LE)
+
 const jsonSummaryToJsonFileInfoMap: Map<string, JsonFileInfo> = new Map();
 const sceneInfoIdToSceneInfoMap: Map<string, SceneInfo> = new Map();
 const pipelineIdToPipelineInfoMap: Map<string, PipelineInfo> = new Map();
@@ -939,12 +943,13 @@ export struct AutoTest {
     try {
       // 1. Initialize audio renderer
       Logger.info(TAG, `Initializing audio renderer: rate=${outputInfo.sampleRate}, ` +
-        `channels=${outputInfo.channels}, bits=${outputInfo.bitDepth}`);
+        `channels=${outputInfo.channels}, bits=${outputInfo.bitDepth}, mode=${outputInfo.bitDepthMode ?? BIT_DEPTH_MODE_INT}`);
 
       let ret = audioNapi.initAudioRenderer(
         outputInfo.sampleRate,
         outputInfo.channels,
-        outputInfo.bitDepth
+        outputInfo.bitDepth,
+        outputInfo.bitDepthMode ?? BIT_DEPTH_MODE_INT  // Default to int mode if not specified
       );
 
       if (ret != SUCCESS) {

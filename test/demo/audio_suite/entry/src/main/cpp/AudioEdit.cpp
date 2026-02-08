@@ -59,6 +59,10 @@ const char *TAG = "[AudioEditTestApp_AudioEdit_cpp]";
 
 const int MAX_PLAY_RESULT_BUFFER_SIZE = 1024 * 1024 * 1024;
 
+// Bit depth mode constants for distinguishing int and float formats
+const int BIT_DEPTH_MODE_INT = 0;   // Integer format (e.g., S32LE)
+const int BIT_DEPTH_MODE_FLOAT = 1; // Float format (e.g., F32LE)
+
 const int SAMPLINGRATE_MULTI = 20;
 const int CHANNELCOUNT_MULTI = 1000;
 const int BITSPERSAMPLE_MULTI = 8;
@@ -910,11 +914,11 @@ static napi_value SetSeparationMode(napi_env env, napi_callback_info info)
 static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
 {
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, TAG, "audioEditTest InitAudioRenderer start");
-    size_t argc = 3;
+    size_t argc = 4;
     napi_value *argv = new napi_value[argc];
     napi_status napiStatus = napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
-    if (napiStatus != napi_ok || argc < 3) {
+    if (napiStatus != napi_ok || argc < 3) {  // bitDepthMode is optional, minimum 3 params
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, TAG,
             "audioEditTest InitAudioRenderer: Invalid arguments, status=%{public}d", napiStatus);
         delete[] argv;
@@ -954,9 +958,20 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
         return result;
     }
 
+    // Parse optional bitDepthMode (0 = int, 1 = float), default to 0
+    int32_t bitDepthMode = BIT_DEPTH_MODE_INT;
+    if (argc >= 4) {
+        napiStatus = napi_get_value_int32(env, argv[3], &bitDepthMode);
+        if (napiStatus != napi_ok) {
+            OH_LOG_Print(LOG_APP, LOG_WARN, GLOBAL_RESMGR, TAG,
+                "audioEditTest InitAudioRenderer: Failed to parse bitDepthMode, defaulting to int mode (0)");
+            bitDepthMode = BIT_DEPTH_MODE_INT; // Default to int mode
+        }
+    }
+
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, TAG,
-        "audioEditTest InitAudioRenderer: sampleRate=%{public}d, channels=%{public}d, bitDepth=%{public}d",
-        sampleRate, channels, bitDepth);
+        "audioEditTest InitAudioRenderer: sampleRate=%{public}d, channels=%{public}d, bitDepth=%{public}d, bitDepthMode=%{public}d",
+        sampleRate, channels, bitDepth, bitDepthMode);
 
     delete[] argv;
 
@@ -976,12 +991,22 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
 
     // Convert bit depth to stream format
     OH_AudioStream_SampleFormat streamSampleFormat;
-    if (bitDepth == 16) {
+    if (bitDepth == 8) {
+        streamSampleFormat = AUDIOSTREAM_SAMPLE_U8;
+    } else if (bitDepth == 16) {
         streamSampleFormat = AUDIOSTREAM_SAMPLE_S16LE;
     } else if (bitDepth == 24) {
         streamSampleFormat = AUDIOSTREAM_SAMPLE_S24LE;
     } else if (bitDepth == 32) {
-        streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
+        if (bitDepthMode == BIT_DEPTH_MODE_FLOAT) {
+            streamSampleFormat = AUDIOSTREAM_SAMPLE_F32LE;
+        } else {
+            if (bitDepthMode != BIT_DEPTH_MODE_INT) {
+                OH_LOG_Print(LOG_APP, LOG_WARN, GLOBAL_RESMGR, TAG,
+                    "audioEditTest InitAudioRenderer: Invalid bitDepthMode %{public}d, defaulting to S32LE", bitDepthMode);
+            }
+            streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
+        }
     } else {
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, TAG,
             "audioEditTest InitAudioRenderer: Unsupported bit depth %{public}d", bitDepth);

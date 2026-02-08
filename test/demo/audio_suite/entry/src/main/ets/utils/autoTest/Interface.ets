@@ -34,6 +34,7 @@ export interface OutputFile {
   bitDepth:number;
   channels:number;
   outputFileList?:string[];
+  bitDepthMode?:number;
 };
 
 export interface ExecuteReport {
