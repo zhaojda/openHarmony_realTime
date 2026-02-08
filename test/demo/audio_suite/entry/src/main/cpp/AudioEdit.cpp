@@ -1048,7 +1048,7 @@ static napi_value StartAudioRenderer(napi_env env, napi_callback_info info)
     // Allocate buffer for recording if needed
     if (g_isRecord) {
         if (g_playTotalAudioData == nullptr) {
-            g_playTotalAudioData = (char *)malloc(MAX_PLAY_RESULT_BUFFER_SIZE);
+            g_playTotalAudioData = (char *)calloc(1, MAX_PLAY_RESULT_BUFFER_SIZE);
             if (g_playTotalAudioData == nullptr) {
                 OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, TAG,
                     "audioEditTest StartAudioRenderer: Failed to allocate g_playTotalAudioData");
