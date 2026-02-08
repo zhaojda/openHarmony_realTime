@@ -64,6 +64,10 @@ const int CHANNELCOUNT_MULTI = 1000;
 const int BITSPERSAMPLE_MULTI = 8;
 const int INPUTNODES_SIZE2 = 2;
 
+// Bit depth mode constants for InitAudioRenderer
+const int32_t BITDEPTH_MODE_INT = 0;
+const int32_t BITDEPTH_MODE_FLOAT = 1;
+
 extern OH_AudioSuitePipeline **g_multiAudioSuitePipeline;
 
 static napi_value AudioEditNodeInit(napi_env env, napi_callback_info info)
@@ -955,11 +959,13 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
     }
 
     // Parse optional 4th parameter bitDepthMode (0=int, 1=float)
-    int32_t bitDepthMode = 0;  // Default to int mode
+    int32_t bitDepthMode = BITDEPTH_MODE_INT;  // Default to int mode
     if (argc >= 4) {
         napiStatus = napi_get_value_int32(env, argv[3], &bitDepthMode);
         if (napiStatus != napi_ok) {
-            bitDepthMode = 0;  // Use default value on parse failure
+            OH_LOG_Print(LOG_APP, LOG_WARN, GLOBAL_RESMGR, TAG,
+                "audioEditTest InitAudioRenderer: Failed to parse bitDepthMode, using default (int mode)");
+            bitDepthMode = BITDEPTH_MODE_INT;  // Use default value on parse failure
         }
     }
 
@@ -992,7 +998,7 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
     } else if (bitDepth == 24) {
         streamSampleFormat = AUDIOSTREAM_SAMPLE_S24LE;
     } else if (bitDepth == 32) {
-        if (bitDepthMode == 1) {
+        if (bitDepthMode == BITDEPTH_MODE_FLOAT) {
             streamSampleFormat = AUDIOSTREAM_SAMPLE_F32LE;
         } else {
             streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
