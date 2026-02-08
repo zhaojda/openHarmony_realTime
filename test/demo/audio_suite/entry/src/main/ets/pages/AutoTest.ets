@@ -853,7 +853,7 @@ export struct AutoTest {
       if (!continueFlag) {
         Logger.info(TAG, `process done, ready to clear timer.`);
         clearInterval(timer);
-        this.destroyPipeline();
+        // Remove this.destroyPipeline() here - let finally block handle cleanup
       }
     }, 200);
 
@@ -893,23 +893,24 @@ export struct AutoTest {
       return SUCCESS;
     })
 
-    await Promise.all(scenePromises).then(async () => {
-      Logger.info(TAG, `scenePromises done `);
+    const results = await Promise.all(scenePromises);
 
-      this.autoTestProcessMap.forEach((value, key) => {
-        if (value < 100) {
-          this.autoTestProcessMap.set(key, 100);
-          Logger.warn(TAG, `Force set process ${key} to 100% after all tasks completed`);
-        }
-      });
+    // Check if any scene failed
+    const hasFailure = results.some((result: number) => result !== SUCCESS);
 
-      if (reportFlag) {
-        await this.saveSingleCaseExecuteReport(jsonFileInfo.summary);
+    this.autoTestProcessMap.forEach((value, key) => {
+      if (value < 100) {
+        this.autoTestProcessMap.set(key, 100);
+        Logger.warn(TAG, `Force set process ${key} to 100% after all tasks completed`);
       }
-    })
+    });
+
+    if (reportFlag) {
+      await this.saveSingleCaseExecuteReport(jsonFileInfo.summary);
+    }
 
     Logger.info(TAG, `executeStandardPlayback completed`);
-    return SUCCESS;
+    return hasFailure ? FAILED : SUCCESS;
   }
 
   // Execute real-time playback (single-pipeline with audio renderer)
@@ -989,6 +990,10 @@ export struct AutoTest {
         }
         await this.sleep(100); // Check every 100ms
       }
+
+      // Wait for C++ side to complete all cleanup operations after callback
+      Logger.info(TAG, 'Playback finished, waiting for C++ cleanup...');
+      await this.sleep(500);
 
       // 6. Get recorded audio data
       Logger.info(TAG, 'Getting recorded audio data...');
