@@ -24,17 +24,19 @@ OH_AudioRenderer *audioRenderer = nullptr;
 
 OH_AudioStreamBuilder *rendererBuilder = nullptr;
 
-bool g_playFinishedFlag = false;
-
-char *g_playAudioData = (char *)malloc(g_playDataSize * 5);
+std::atomic<bool> g_playFinishedFlag(false);
 
 int32_t g_playDataSize = 0;
 
-bool g_isRecord = false;
+char *g_playAudioData = nullptr;
 
-char *g_playTotalAudioData = (char *)malloc(1024 * 1024 * 100);
+std::atomic<bool> g_isRecord(false);
+
+char *g_playTotalAudioData = (char *)malloc(MAX_PLAY_RESULT_BUFFER_SIZE);
 
 int32_t g_playResultTotalSize = 0;
+
+std::mutex g_playDataMutex;
 
 OH_AudioDataArray *g_playOhAudioDataArray = new OH_AudioDataArray();
 
@@ -70,12 +72,14 @@ OH_AudioSuite_Result OneRenDerFrame(int32_t audioDataSize, int32_t *writeSize)
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                      "audioEditTest OH_AudioSuiteEngine_RenderFrame audioDataSize is %{public}d",
                      static_cast<int>(audioDataSize));
+        *writeSize = 0;
         return OH_AudioSuite_Result::AUDIOSUITE_ERROR_SYSTEM;
     }
     char *audioData = (char *)malloc(audioDataSize);
     if (audioData == nullptr) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                      "audioEditTest OneRenDerFrame malloc audioData failed, audioDataSize: %{public}d", audioDataSize);
+        *writeSize = 0;
         return static_cast<OH_AudioSuite_Result>(AudioSuiteResult::DEMO_ERROR_FAILD);
     }
     OH_AudioSuite_Result result =
@@ -87,6 +91,9 @@ OH_AudioSuite_Result OneRenDerFrame(int32_t audioDataSize, int32_t *writeSize)
     if (result != OH_AudioSuite_Result::AUDIOSUITE_SUCCESS) {
         OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                      "audioEditTest OH_AudioSuiteEngine_RenderFrame result is %{public}d", static_cast<int>(result));
+        *writeSize = 0;
+        free(audioData);
+        audioData = nullptr;
         return result;
     }
     // Save the obtained buffer value each time
@@ -94,6 +101,7 @@ OH_AudioSuite_Result OneRenDerFrame(int32_t audioDataSize, int32_t *writeSize)
     if (g_playAudioData == nullptr) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                      "audioEditTest OneRenDerFrame malloc g_playAudioData failed, writeSize: %{public}d", *writeSize);
+        *writeSize = 0;
         free(audioData);
         audioData = nullptr;
         return static_cast<OH_AudioSuite_Result>(AudioSuiteResult::DEMO_ERROR_FAILD);
@@ -108,14 +116,28 @@ OH_AudioSuite_Result OneRenDerFrame(int32_t audioDataSize, int32_t *writeSize)
 
 OH_AudioSuite_Result OneMulRenDerFrame(int32_t audioDataSize, int32_t *writeSize)
 {
+    // Free old audioDataArray memory before allocating new
+    if (g_playOhAudioDataArray->audioDataArray != nullptr) {
+        for (int i = ARG_0; i < g_playOhAudioDataArray->arraySize; i++) {
+            if (g_playOhAudioDataArray->audioDataArray[i] != nullptr) {
+                free(g_playOhAudioDataArray->audioDataArray[i]);
+                g_playOhAudioDataArray->audioDataArray[i] = nullptr;
+            }
+        }
+        free(g_playOhAudioDataArray->audioDataArray);
+        g_playOhAudioDataArray->audioDataArray = nullptr;
+    }
+
     g_playOhAudioDataArray->audioDataArray = (void **)malloc(ARG_2 * sizeof(void *));
     if (g_playOhAudioDataArray->audioDataArray == nullptr) {
         OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                      "OH_AudioSuiteEngine_MultiRenderFrame g_playOhAudioDataArray is nullptr");
+        *writeSize = 0;
         return static_cast<OH_AudioSuite_Result>(AudioSuiteResult::DEMO_ERROR_FAILD);
     }
     for (int i = ARG_0; i < ARG_2; i++) {
         if (audioDataSize <= ARG_0) {
+            *writeSize = 0;
             return OH_AudioSuite_Result::AUDIOSUITE_ERROR_INVALID_PARAM;
         }
         g_playOhAudioDataArray->audioDataArray[i] = (void *)malloc(audioDataSize);
@@ -128,10 +150,17 @@ OH_AudioSuite_Result OneMulRenDerFrame(int32_t audioDataSize, int32_t *writeSize
         OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                      "audioEditTest OH_AudioSuiteEngine_MultiRenderFrame result is %{public}d",
                      static_cast<int>(result));
+        *writeSize = 0;
         return result;
     }
     // Save the obtained buffer value each time
     g_playAudioData = (char *)malloc(*writeSize);
+    if (g_playAudioData == nullptr) {
+        OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
+                     "audioEditTest OneMulRenDerFrame malloc g_playAudioData failed, writeSize: %{public}d", *writeSize);
+        *writeSize = 0;
+        return static_cast<OH_AudioSuite_Result>(AudioSuiteResult::DEMO_ERROR_FAILD);
+    }
     if (g_separationMode == ARG_0) {
         std::copy(static_cast<char *>(g_playOhAudioDataArray->audioDataArray[ARG_0]),
                   static_cast<char *>(g_playOhAudioDataArray->audioDataArray[ARG_0]) + *writeSize,
@@ -157,33 +186,13 @@ OH_AudioData_Callback_Result PlayAudioRendererOnWriteData(OH_AudioRenderer *rend
                      "audioEditTest PlayAudioRendererOnWriteData renderer or audioData is nullptr");
         return AUDIO_DATA_CALLBACK_RESULT_INVALID;
     }
-    int32_t writeSize = 0;
-    if (!g_playFinishedFlag) {
-        OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
-                     "OneRenDerFrame g_multiRenderFrameFlag: %{public}s", g_multiRenderFrameFlag ? "true" : "false");
-        // If there a source separation node
-        if (!g_multiRenderFrameFlag) {
-            OneRenDerFrame(audioDataSize, &writeSize);
-        } else {
-            OneMulRenDerFrame(audioDataSize, &writeSize);
-        }
-        // Save the obtained buffer value each time
-        if (audioDataSize != 0 && g_isRecord == true) {
-            int32_t copySize = std::min(audioDataSize, writeSize);
-            std::copy(g_playAudioData, g_playAudioData + copySize,
-                      static_cast<char *>(g_playTotalAudioData) + g_playResultTotalSize);
-            g_playResultTotalSize += copySize;
-        }
-    }
-    // Playing audio data
-    int32_t copySize = std::min(audioDataSize, writeSize);
-    if (g_playAudioData != nullptr && copySize > 0) {
-        std::copy(g_playAudioData, g_playAudioData + copySize, static_cast<char *>(audioData));
-    }
-    free(g_playAudioData);
-    g_playAudioData = nullptr;
+
+    // Root Cause #1: Zero the audioData buffer to prevent garbage data playback
+    memset(audioData, 0, audioDataSize);
+
+    // Root Cause #2: Handle playback finished flag properly
     if (g_playFinishedFlag) {
-        // Stop playing
+        // audioData is already zeroed, return INVALID to stop playback
         OH_AudioRenderer_Stop(audioRenderer);
         // Stop pipeline
         ResetAllIsResetTotalWriteAudioDataSize();
@@ -196,7 +205,46 @@ OH_AudioData_Callback_Result PlayAudioRendererOnWriteData(OH_AudioRenderer *rend
             free(g_totalBuff);
             g_totalBuff = nullptr;
         }
+        return AUDIO_DATA_CALLBACK_RESULT_INVALID;
     }
+
+    int32_t writeSize = 0;
+    
+    // Root Cause #5: Acquire mutex for thread-safe access
+    std::lock_guard<std::mutex> lock(g_playDataMutex);
+    
+    OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
+                 "OneRenDerFrame g_multiRenderFrameFlag: %{public}s", g_multiRenderFrameFlag ? "true" : "false");
+    // If there a source separation node
+    if (!g_multiRenderFrameFlag) {
+        OneRenDerFrame(audioDataSize, &writeSize);
+    } else {
+        OneMulRenDerFrame(audioDataSize, &writeSize);
+    }
+    // Save the obtained buffer value each time
+    // Root Cause #4: Add boundary check for recording buffer
+    if (audioDataSize != 0 && g_isRecord == true) {
+        int32_t copySize = std::min(audioDataSize, writeSize);
+        if (g_playResultTotalSize + copySize <= MAX_PLAY_RESULT_BUFFER_SIZE) {
+            std::copy(g_playAudioData, g_playAudioData + copySize,
+                      static_cast<char *>(g_playTotalAudioData) + g_playResultTotalSize);
+            g_playResultTotalSize += copySize;
+        } else {
+            OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
+                         "audioEditTest PlayAudioRendererOnWriteData recording buffer overflow prevented, "
+                         "g_playResultTotalSize: %{public}d, copySize: %{public}d, MAX_SIZE: %{public}d",
+                         g_playResultTotalSize, copySize, MAX_PLAY_RESULT_BUFFER_SIZE);
+        }
+    }
+    
+    // Playing audio data
+    int32_t copySize = std::min(audioDataSize, writeSize);
+    if (g_playAudioData != nullptr && copySize > 0) {
+        std::copy(g_playAudioData, g_playAudioData + copySize, static_cast<char *>(audioData));
+    }
+    free(g_playAudioData);
+    g_playAudioData = nullptr;
+    
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                  "audioEditTest PlayAudioRendererOnWriteData g_playResultTotalSize: %{public}d, writeSize: %{public}d",
                  g_playResultTotalSize, writeSize);
