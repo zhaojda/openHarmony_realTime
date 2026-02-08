@@ -59,6 +59,10 @@ const char *TAG = "[AudioEditTestApp_AudioEdit_cpp]";
 
 const int MAX_PLAY_RESULT_BUFFER_SIZE = 1024 * 1024 * 1024;
 
+// Bit depth mode constants for distinguishing int and float formats
+const int BIT_DEPTH_MODE_INT = 0;   // Integer format (e.g., S32LE)
+const int BIT_DEPTH_MODE_FLOAT = 1; // Float format (e.g., F32LE)
+
 const int SAMPLINGRATE_MULTI = 20;
 const int CHANNELCOUNT_MULTI = 1000;
 const int BITSPERSAMPLE_MULTI = 8;
@@ -955,11 +959,11 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
     }
 
     // Parse optional bitDepthMode (0 = int, 1 = float), default to 0
-    int32_t bitDepthMode = 0;
+    int32_t bitDepthMode = BIT_DEPTH_MODE_INT;
     if (argc >= 4) {
         napiStatus = napi_get_value_int32(env, argv[3], &bitDepthMode);
         if (napiStatus != napi_ok) {
-            bitDepthMode = 0; // Default to int mode
+            bitDepthMode = BIT_DEPTH_MODE_INT; // Default to int mode
         }
     }
 
@@ -992,7 +996,7 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
     } else if (bitDepth == 24) {
         streamSampleFormat = AUDIOSTREAM_SAMPLE_S24LE;
     } else if (bitDepth == 32) {
-        if (bitDepthMode == 1) {
+        if (bitDepthMode == BIT_DEPTH_MODE_FLOAT) {
             streamSampleFormat = AUDIOSTREAM_SAMPLE_F32LE;
         } else {
             streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
