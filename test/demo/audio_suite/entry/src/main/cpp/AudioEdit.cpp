@@ -1001,6 +1001,10 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
         if (bitDepthMode == BIT_DEPTH_MODE_FLOAT) {
             streamSampleFormat = AUDIOSTREAM_SAMPLE_F32LE;
         } else {
+            if (bitDepthMode != BIT_DEPTH_MODE_INT) {
+                OH_LOG_Print(LOG_APP, LOG_WARN, GLOBAL_RESMGR, TAG,
+                    "audioEditTest InitAudioRenderer: Invalid bitDepthMode %{public}d, defaulting to S32LE", bitDepthMode);
+            }
             streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
         }
     } else {
