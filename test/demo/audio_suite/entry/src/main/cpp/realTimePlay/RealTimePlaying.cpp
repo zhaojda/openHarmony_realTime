@@ -96,6 +96,11 @@ OH_AudioSuite_Result OneRenDerFrame(int32_t audioDataSize, int32_t *writeSize)
         audioData = nullptr;
         return result;
     }
+    // Free old g_playAudioData before allocating new
+    if (g_playAudioData != nullptr) {
+        free(g_playAudioData);
+        g_playAudioData = nullptr;
+    }
     // Save the obtained buffer value each time
     g_playAudioData = (char *)malloc(*writeSize);
     if (g_playAudioData == nullptr) {
@@ -118,7 +123,7 @@ OH_AudioSuite_Result OneMulRenDerFrame(int32_t audioDataSize, int32_t *writeSize
 {
     // Free old audioDataArray memory before allocating new
     if (g_playOhAudioDataArray->audioDataArray != nullptr) {
-        for (int i = ARG_0; i < g_playOhAudioDataArray->arraySize; i++) {
+        for (int i = ARG_0; i < ARG_2; i++) {
             if (g_playOhAudioDataArray->audioDataArray[i] != nullptr) {
                 free(g_playOhAudioDataArray->audioDataArray[i]);
                 g_playOhAudioDataArray->audioDataArray[i] = nullptr;
@@ -141,6 +146,19 @@ OH_AudioSuite_Result OneMulRenDerFrame(int32_t audioDataSize, int32_t *writeSize
             return OH_AudioSuite_Result::AUDIOSUITE_ERROR_INVALID_PARAM;
         }
         g_playOhAudioDataArray->audioDataArray[i] = (void *)malloc(audioDataSize);
+        if (g_playOhAudioDataArray->audioDataArray[i] == nullptr) {
+            OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
+                         "audioEditTest OneMulRenDerFrame malloc audioDataArray[%{public}d] failed", i);
+            // Free already allocated elements
+            for (int j = ARG_0; j < i; j++) {
+                free(g_playOhAudioDataArray->audioDataArray[j]);
+                g_playOhAudioDataArray->audioDataArray[j] = nullptr;
+            }
+            free(g_playOhAudioDataArray->audioDataArray);
+            g_playOhAudioDataArray->audioDataArray = nullptr;
+            *writeSize = 0;
+            return static_cast<OH_AudioSuite_Result>(AudioSuiteResult::DEMO_ERROR_FAILD);
+        }
     }
     g_playOhAudioDataArray->arraySize = ARG_2;
     g_playOhAudioDataArray->requestFrameSize = audioDataSize;
@@ -152,6 +170,11 @@ OH_AudioSuite_Result OneMulRenDerFrame(int32_t audioDataSize, int32_t *writeSize
                      static_cast<int>(result));
         *writeSize = 0;
         return result;
+    }
+    // Free old g_playAudioData before allocating new
+    if (g_playAudioData != nullptr) {
+        free(g_playAudioData);
+        g_playAudioData = nullptr;
     }
     // Save the obtained buffer value each time
     g_playAudioData = (char *)malloc(*writeSize);
@@ -190,6 +213,9 @@ OH_AudioData_Callback_Result PlayAudioRendererOnWriteData(OH_AudioRenderer *rend
     // Root Cause #1: Zero the audioData buffer to prevent garbage data playback
     memset(audioData, 0, audioDataSize);
 
+    // Root Cause #5: Acquire mutex for thread-safe access
+    std::lock_guard<std::mutex> lock(g_playDataMutex);
+
     // Root Cause #2: Handle playback finished flag properly
     if (g_playFinishedFlag) {
         // audioData is already zeroed, return INVALID to stop playback
@@ -209,9 +235,6 @@ OH_AudioData_Callback_Result PlayAudioRendererOnWriteData(OH_AudioRenderer *rend
     }
 
     int32_t writeSize = 0;
-    
-    // Root Cause #5: Acquire mutex for thread-safe access
-    std::lock_guard<std::mutex> lock(g_playDataMutex);
     
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, REAL_TIME_PLAYING_TAG,
                  "OneRenDerFrame g_multiRenderFrameFlag: %{public}s", g_multiRenderFrameFlag ? "true" : "false");
