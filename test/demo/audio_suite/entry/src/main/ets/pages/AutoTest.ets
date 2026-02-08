@@ -939,12 +939,13 @@ export struct AutoTest {
     try {
       // 1. Initialize audio renderer
       Logger.info(TAG, `Initializing audio renderer: rate=${outputInfo.sampleRate}, ` +
-        `channels=${outputInfo.channels}, bits=${outputInfo.bitDepth}`);
+        `channels=${outputInfo.channels}, bits=${outputInfo.bitDepth}, mode=${outputInfo.bitDepthMode ?? 0}`);
 
       let ret = audioNapi.initAudioRenderer(
         outputInfo.sampleRate,
         outputInfo.channels,
-        outputInfo.bitDepth
+        outputInfo.bitDepth,
+        outputInfo.bitDepthMode ?? 0  // Default to 0 (int mode) if not specified
       );
 
       if (ret != SUCCESS) {

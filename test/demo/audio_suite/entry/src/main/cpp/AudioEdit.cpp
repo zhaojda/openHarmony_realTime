@@ -910,11 +910,11 @@ static napi_value SetSeparationMode(napi_env env, napi_callback_info info)
 static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
 {
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, TAG, "audioEditTest InitAudioRenderer start");
-    size_t argc = 3;
+    size_t argc = 4;
     napi_value *argv = new napi_value[argc];
     napi_status napiStatus = napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
-    if (napiStatus != napi_ok || argc < 3) {
+    if (napiStatus != napi_ok || argc < 3) {  // bitDepthMode is optional, minimum 3 params
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, TAG,
             "audioEditTest InitAudioRenderer: Invalid arguments, status=%{public}d", napiStatus);
         delete[] argv;
@@ -954,9 +954,18 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
         return result;
     }
 
+    // Parse optional bitDepthMode (0 = int, 1 = float), default to 0
+    int32_t bitDepthMode = 0;
+    if (argc >= 4) {
+        napiStatus = napi_get_value_int32(env, argv[3], &bitDepthMode);
+        if (napiStatus != napi_ok) {
+            bitDepthMode = 0; // Default to int mode
+        }
+    }
+
     OH_LOG_Print(LOG_APP, LOG_INFO, GLOBAL_RESMGR, TAG,
-        "audioEditTest InitAudioRenderer: sampleRate=%{public}d, channels=%{public}d, bitDepth=%{public}d",
-        sampleRate, channels, bitDepth);
+        "audioEditTest InitAudioRenderer: sampleRate=%{public}d, channels=%{public}d, bitDepth=%{public}d, bitDepthMode=%{public}d",
+        sampleRate, channels, bitDepth, bitDepthMode);
 
     delete[] argv;
 
@@ -976,12 +985,18 @@ static napi_value InitAudioRenderer(napi_env env, napi_callback_info info)
 
     // Convert bit depth to stream format
     OH_AudioStream_SampleFormat streamSampleFormat;
-    if (bitDepth == 16) {
+    if (bitDepth == 8) {
+        streamSampleFormat = AUDIOSTREAM_SAMPLE_U8;
+    } else if (bitDepth == 16) {
         streamSampleFormat = AUDIOSTREAM_SAMPLE_S16LE;
     } else if (bitDepth == 24) {
         streamSampleFormat = AUDIOSTREAM_SAMPLE_S24LE;
     } else if (bitDepth == 32) {
-        streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
+        if (bitDepthMode == 1) {
+            streamSampleFormat = AUDIOSTREAM_SAMPLE_F32LE;
+        } else {
+            streamSampleFormat = AUDIOSTREAM_SAMPLE_S32LE;
+        }
     } else {
         OH_LOG_Print(LOG_APP, LOG_ERROR, GLOBAL_RESMGR, TAG,
             "audioEditTest InitAudioRenderer: Unsupported bit depth %{public}d", bitDepth);
